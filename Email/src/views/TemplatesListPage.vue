@@ -1,18 +1,37 @@
 <template>
   <div class="template-list-page">
-    <h1>Email Templates</h1>
-    <div v-if="loading">Loading templates...</div>
-    <div v-if="error" class="error">Error fetching templates: {{ error.message }}</div>
-    <ul v-if="templates.length > 0">
+    <h1 class="text-3xl font-bold mb-6 text-gray-700">Email Templates</h1>
+    
+    <div v-if="loading" class="text-center text-gray-500">
+      Loading templates...
+    </div>
+    
+    <div v-else-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6" role="alert">
+      <strong class="font-bold">Error:</strong>
+      <span class="block sm:inline"> {{ error.message }}</span>
+    </div>
+    
+    <ul v-else-if="templates.length > 0" class="space-y-4">
       <li v-for="template in templates" :key="template.id">
-        <router-link :to="{ name: 'TemplateDetail', params: { id: template.id } }">
-          <h2>{{ template.name }}</h2>
-          <p v-if="template.category">Category: {{ template.category }}</p>
-          <p v-if="template.description">Description: {{ template.description }}</p>
+        <router-link 
+          :to="{ name: 'TemplateDetail', params: { id: template.id } }" 
+          class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition-shadow duration-200 border border-gray-200"
+        >
+          <h2 class="text-xl font-semibold text-blue-600 mb-2">{{ template.name }}</h2>
+          <p v-if="template.category" class="text-sm text-gray-500 mb-1">
+            Category: <span class="font-medium text-gray-700">{{ template.category }}</span>
+          </p>
+          <p v-if="template.description" class="text-gray-600 text-sm">
+            {{ template.description }}
+          </p>
         </router-link>
       </li>
     </ul>
-    <div v-else-if="!loading && !error">No templates found.</div>
+    
+    <div v-else class="text-center text-gray-500 mt-8">
+      No templates found.
+    </div>
+
   </div>
 </template>
 
@@ -48,38 +67,6 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
-.template-list-page {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-
-li {
-  border: 1px solid #eee;
-  padding: 15px;
-  margin-bottom: 10px;
-  border-radius: 5px;
-  background-color: #f9f9f9;
-}
-
-li a {
-  text-decoration: none;
-  color: inherit;
-}
-
-li h2 {
-  margin-top: 0;
-  color: #42b983;
-}
-
-.error {
-  color: red;
-  margin-bottom: 15px;
-}
+<style>
+/* Removed scoped styles, using Tailwind utility classes now */
 </style> 
