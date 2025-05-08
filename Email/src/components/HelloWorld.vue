@@ -1,11 +1,27 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+// import { supabase } from '../supabase' // Commented out as it's not used here for now
 
 defineProps({
   msg: String,
 })
 
 const count = ref(0)
+
+// Example: Fetch tables from Supabase (public schema)
+// const tables = ref([]) // Commented out
+// const error = ref(null) // Commented out
+
+/* Commenting out the onMounted hook that tried to fetch from 'your_table'
+onMounted(async () => {
+  const { data, error: err } = await supabase.from('your_table').select('*')
+  if (err) {
+    error.value = err.message
+  } else {
+    tables.value = data
+  }
+})
+*/
 </script>
 
 <template>
@@ -18,6 +34,12 @@ const count = ref(0)
       <code>components/HelloWorld.vue</code> to test HMR
     </p>
   </div>
+
+  <!-- <div v-if="error" style="color: red;">Supabase error: {{ error }}</div> --> <!-- Commented out -->
+  <!-- <div v-else>
+    <h2>Supabase Data Example</h2>
+    <pre>{{ tables }}</pre>
+  </div> --> <!-- Commented out -->
 
   <p>
     Check out

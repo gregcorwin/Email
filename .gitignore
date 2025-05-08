@@ -1,0 +1,38 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Vue/Vite specific (if .env files are inside the Vue project too)
+Email/.env
+Email/.env.*
+!Email/.env.example
+
+# Build output
+dist/
+dist-ssr/
+
+# IDE & OS specific
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
+.cursor/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.swp
+
+# CSV backups (if you don_t want to track them)
+legacy_templates backup.csv 

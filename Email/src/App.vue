@@ -3,15 +3,15 @@ import HelloWorld from './components/HelloWorld.vue'
 </script>
 
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
-  </div>
-  <HelloWorld msg="Vite + Vue" />
+  <header>
+    <nav>
+      <router-link to="/">Home</router-link>
+      <router-link to="/templates">Templates</router-link>
+    </nav>
+  </header>
+  <main>
+    <router-view />
+  </main>
 </template>
 
 <style scoped>
@@ -26,5 +26,26 @@ import HelloWorld from './components/HelloWorld.vue'
 }
 .logo.vue:hover {
   filter: drop-shadow(0 0 2em #42b883aa);
+}
+header {
+  background-color: #f0f0f0;
+  padding: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+nav a {
+  margin: 0 15px;
+  text-decoration: none;
+  color: #333;
+  font-size: 1.1em;
+}
+nav a.router-link-exact-active {
+  font-weight: bold;
+  color: #42b983;
+  border-bottom: 2px solid #42b983;
+  padding-bottom: 2px;
+}
+main {
+  padding: 0 20px;
 }
 </style>
