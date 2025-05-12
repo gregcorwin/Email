@@ -5,6 +5,9 @@ import TemplateDetailPage from '../views/TemplateDetailPage.vue';
 import AuthPage from '../views/AuthPage.vue'; // Import the new Auth page
 import DesignsListPage from '../views/DesignsListPage.vue'; // New
 import DesignEditorPage from '../views/DesignEditorPage.vue'; // New (for create/edit)
+// New Transformation Set Pages
+import TransformationsListPage from '../views/TransformationsListPage.vue';
+import TransformationSetEditorPage from '../views/TransformationSetEditorPage.vue';
 
 const routes = [
   {
@@ -47,6 +50,27 @@ const routes = [
     name: 'DesignEdit',
     component: DesignEditorPage,
     props: (route) => ({ mode: 'edit', id: route.params.id }), // Pass mode and id props
+    meta: { requiresAuth: true }
+  },
+  // Transformation Set Routes
+  {
+    path: '/transformations',
+    name: 'TransformationsList',
+    component: TransformationsListPage,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/transformations/new',
+    name: 'TransformationSetCreate',
+    component: TransformationSetEditorPage,
+    props: { mode: 'create' },
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/transformations/:id/edit',
+    name: 'TransformationSetEdit',
+    component: TransformationSetEditorPage,
+    props: (route) => ({ mode: 'edit', id: route.params.id }),
     meta: { requiresAuth: true }
   },
   // We will add /templates and /templates/:id routes later

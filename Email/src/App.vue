@@ -88,6 +88,14 @@ async function handleLogout() {
           >
             Designs
           </router-link>
+          <router-link 
+            v-if="session" 
+            to="/transformations" 
+            class="text-gray-600 hover:text-blue-600 transition-colors duration-200"
+            active-class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1"
+          >
+            Transformations
+          </router-link>
         </div>
 
         <!-- Right side Auth links/info -->
