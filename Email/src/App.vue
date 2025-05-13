@@ -1,132 +1,165 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { supabase } from './supabase'; // Import your Supabase client
-import { useRouter } from 'vue-router'; // Import router for redirecting after logout
+import { supabase } from './supabase';
+import { useRouter, useRoute } from 'vue-router';
 
-// Reactive variable to hold the user session
 const session = ref(null);
-
-// Listener handle
 let authListener = null;
-const router = useRouter(); // Get router instance
+const router = useRouter();
+const route = useRoute();
+
+// Static navigation, includes Security for now. We can refine admin-only visibility later.
+const navigation = [
+  { name: 'Home', to: { name: 'Home' }, routeName: 'Home' },
+  { name: 'Templates', to: { name: 'TemplatesList' }, routeName: 'TemplatesList' },
+  { name: 'Collections', to: { name: 'CollectionsList' }, routeName: 'CollectionsList' },
+  { name: 'Designs', to: { name: 'DesignsList' }, routeName: 'DesignsList' },
+  { name: 'Transformations', to: { name: 'TransformationsList' }, routeName: 'TransformationsList' },
+  { name: 'Gallery', to: { name: 'GalleryPage' }, routeName: 'GalleryPage' },
+  { name: 'Security', to: { name: 'SecurityDashboardPage' }, routeName: 'SecurityDashboardPage' },
+];
 
 onMounted(() => {
-  // Check initial session state
   supabase.auth.getSession().then(({ data }) => {
     session.value = data.session;
-    console.log('Initial session:', session.value ? 'Exists' : 'Null'); // Log existence
-  });
-
-  // Listen for auth changes (login, logout)
-  const { data: listener } = supabase.auth.onAuthStateChange((event, _session) => {
-    console.log('Auth event:', event, 'Session:', _session ? 'Exists' : 'Null'); // Log existence
-    const previousSessionState = !!session.value; // Check if user was logged in before this event
-    session.value = _session;
-    
-    // Redirect on state change
-    if (event === 'SIGNED_IN' && !previousSessionState) { // Only redirect if they just logged in
-      // Redirect to a default logged-in page, e.g., Templates list
-      console.log('Redirecting to Templates after SIGNED_IN...');
-      router.push({ name: 'TemplatesList' }); // Or 'DesignsList' if preferred
-    } else if (event === 'SIGNED_OUT') {
-      console.log('Redirecting to Home after SIGNED_OUT...');
-      router.push({ name: 'Home' }); // Redirect to home after logout
+    console.log('[App.vue] Initial session on mount:', session.value ? 'Exists' : 'Null', 'AAL:', session.value?.user?.aal);
+    if (session.value && route.name === 'Auth' && !route.query.mfa_required) {
+      console.log('[App.vue] Active session on mount & on Auth page (not MFA step), redirecting to TemplatesList.');
+      router.push({ name: 'TemplatesList' });
     }
   });
-  authListener = listener; // Store the listener object
+
+  const { data: listener } = supabase.auth.onAuthStateChange(async (event, _session) => {
+    console.log('[App.vue] Auth event received:', event, 'Incoming _session AAL:', _session?.user?.aal, 'User ID:', _session?.user?.id);
+    session.value = _session;
+    console.log('[App.vue] session.value updated. Current user ID:', session.value?.user?.id);
+
+    if (event === 'SIGNED_IN') {
+      const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (aalError) {
+        console.error("[App.vue] Error fetching AAL after SIGNED_IN:", aalError);
+        router.push({ name: 'TemplatesList' }); 
+        return;
+      }
+      console.log("[App.vue] SIGNED_IN - AAL Data:", aalData);
+      const { currentLevel, nextLevel } = aalData;
+      if (currentLevel === 'aal1' && nextLevel === 'aal2') {
+        console.log("[App.vue] MFA required (aal1 and next is aal2). Redirecting to Auth for MFA input.");
+        router.push({ name: 'Auth', query: { mfa_required: 'true' } });
+      } else if (currentLevel === 'aal2') {
+        console.log("[App.vue] MFA already satisfied (aal2). Proceeding to main app.");
+        router.push({ name: 'TemplatesList' });
+      } else {
+        console.log("[App.vue] MFA not enrolled or not required (current:", currentLevel, "next:", nextLevel, "). Proceeding to main app.");
+        router.push({ name: 'TemplatesList' });
+      }
+    } else if (event === 'SIGNED_OUT') {
+      console.log("[App.vue] SIGNED_OUT event detected. Session user should be null. Redirecting to Home.");
+      router.push({ name: 'Home' });
+    } else if (event === 'MFA_CHALLENGE_VERIFIED'){
+        console.log("[App.vue] MFA_CHALLENGE_VERIFIED event. Session AAL should be aal2. Redirecting to main app.");
+        router.push({ name: 'TemplatesList' });
+    }
+    else if (event === 'TOKEN_REFRESHED') {
+      console.log("[App.vue] TOKEN_REFRESHED event. New AAL in session:", _session?.user?.aal);
+      if (_session?.user?.aal === 'aal2' && route.name === 'Auth' && route.query.mfa_required === 'true'){
+        console.log("[App.vue] TOKEN_REFRESHED to aal2 while on MFA input page. Redirecting to main app.");
+        router.push({ name: 'TemplatesList'});
+      }
+    }
+  });
+  authListener = listener;
 });
 
-// Clean up the listener when the component is unmounted
 onUnmounted(() => {
   if (authListener?.unsubscribe) {
     authListener.unsubscribe();
-    console.log('Auth listener unsubscribed.');
+    console.log('[App.vue] Auth listener unsubscribed.');
   }
 });
 
-// Example function for logout (will be called by a button)
 async function handleLogout() {
-  console.log('Logging out...');
-  try {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    console.log('Logout successful');
-    // Redirect is handled by the listener now
-  } catch (error) {
-    console.error('Logout error:', error.message);
-    alert(error.message);
-  }
+    console.log('[App.vue] SIMPLE LOGOUT: Attempting to call supabase.auth.signOut()...');
+    try {
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+            console.error('[App.vue] SIMPLE LOGOUT: supabase.auth.signOut() returned an error object:', error);
+        } else {
+            console.log('[App.vue] SIMPLE LOGOUT: supabase.auth.signOut() call completed, no immediate error object. Expecting SIGNED_OUT event.');
+        }
+    } catch (e) {
+        console.error('[App.vue] SIMPLE LOGOUT: Error caught during supabase.auth.signOut() call:', e);
+    }
+    console.log('[App.vue] SIMPLE LOGOUT: handleLogout function finished.');
 }
-
 </script>
 
 <template>
   <div class="min-h-screen bg-gray-100 text-gray-800">
-    <header class="bg-white shadow-md">
-      <nav class="container mx-auto px-6 py-3 flex justify-between items-center">
-        <!-- Left side links -->
-        <div class="flex space-x-6">
-          <router-link 
-            to="/" 
-            class="text-gray-600 hover:text-blue-600 transition-colors duration-200"
-            active-class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1"
-          >
-            Home
-          </router-link>
-          <router-link 
-            to="/templates" 
-            class="text-gray-600 hover:text-blue-600 transition-colors duration-200"
-            active-class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1"
-          >
-            Templates
-          </router-link>
-          <router-link 
-            v-if="session" 
-            to="/designs" 
-            class="text-gray-600 hover:text-blue-600 transition-colors duration-200"
-            active-class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1"
-          >
-            Designs
-          </router-link>
-          <router-link 
-            v-if="session" 
-            to="/transformations" 
-            class="text-gray-600 hover:text-blue-600 transition-colors duration-200"
-            active-class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1"
-          >
-            Transformations
-          </router-link>
-        </div>
-
-        <!-- Right side Auth links/info -->
+    <header class="bg-white shadow-md sticky top-0 z-50">
+      <nav class="container mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
         <div class="flex items-center space-x-4">
-          <div v-if="session" class="flex items-center space-x-4">
-            <span class="text-sm text-gray-500">{{ session.user?.email }}</span>
+          <router-link :to="{ name: 'Home' }" class="text-xl font-semibold text-indigo-600 hover:text-indigo-700">
+            Email System
+          </router-link>
+          <div class="hidden md:flex items-baseline space-x-1">
+            <router-link 
+              v-for="item in navigation" 
+              :key="item.name" 
+              :to="item.to" 
+              class="px-3 py-2 rounded-md text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+              active-class="bg-indigo-100 text-indigo-700 font-semibold"
+            >
+              {{ item.name }}
+            </router-link>
+          </div>
+        </div>
+        <div class="flex items-center space-x-3">
+          <div v-if="session && session.user" class="flex items-center space-x-3">
+            <span class="text-sm text-gray-500 hidden sm:inline">{{ session.user.email }}</span>
+            <router-link 
+              :to="{ name: 'UserSettingsPage' }" 
+              title="Settings"
+              class="p-2 rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            >
+              <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c.836 1.372-.734 2.942-2.106 2.106a1.532 1.532 0 01-2.287-.947c-.379-1.561-2.6-1.561-2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c-.836-1.372.734 2.942 2.106-2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287.947c1.372-.836 2.942.734 2.106 2.106a1.532 1.532 0 01.947 2.287c1.561.379 1.561 2.6 0 2.978a1.532 1.532 0 01-.947 2.287c-.836 1.372.734 2.942 2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" />
+              </svg>
+              <span class="sr-only">User Settings</span>
+            </router-link>
             <button 
               @click="handleLogout" 
-              class="bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-1 px-3 rounded transition-colors duration-200"
+              class="px-3 py-1.5 text-sm font-medium rounded-md shadow-sm text-white bg-red-500 hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors duration-200"
             >
               Logout
             </button>
           </div>
           <router-link 
             v-else 
-            to="/auth"
-            class="bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium py-1 px-3 rounded transition-colors duration-200"
+            :to="{ name: 'Auth' }"
+            class="px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
           >
             Login / Sign Up
           </router-link>
         </div>
+        <div class="-mr-2 flex md:hidden">
+          <button type="button" class="bg-indigo-600 inline-flex items-center justify-center p-2 rounded-md text-indigo-200 hover:text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-indigo-600 focus:ring-white" aria-controls="mobile-menu" aria-expanded="false">
+            <span class="sr-only">Open main menu</span>
+            <svg class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+            <svg class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
       </nav>
     </header>
-    <main class="container mx-auto px-6 py-8">
+    <main class="container mx-auto px-6 py-8 pt-24">
       <router-view />
     </main>
   </div>
 </template>
 
 <style>
-/* We removed the scoped styles as Tailwind classes are used now.
-   Global styles (like base font) can go in src/style.css if needed,
-   but Tailwind's base often covers this. */
+html, body {
+  margin: 0;
+  padding: 0;
+}
 </style>

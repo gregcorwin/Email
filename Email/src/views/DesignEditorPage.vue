@@ -97,13 +97,16 @@
       </div>
 
       <div class="pt-4 flex justify-end space-x-3">
-        <router-link :to="{ name: 'DesignsList' }" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded transition-colors duration-200">
+        <router-link 
+          :to="{ name: 'DesignsList' }" 
+          class="px-4 py-2 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200"
+        >
           Cancel
         </router-link>
         <button 
           type="submit" 
           :disabled="submitting || !canEdit"
-          class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
         >
           {{ submitButtonText }}
         </button>

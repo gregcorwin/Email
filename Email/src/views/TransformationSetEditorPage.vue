@@ -60,7 +60,10 @@
              </label>
           </div>
         </div>
-        <button type="button" @click="addRule" class="mt-2 text-sm bg-blue-500 hover:bg-blue-600 text-white py-1 px-3 rounded">
+        <button 
+            type="button" 
+            @click="addRule" 
+            class="mt-2 px-3 py-1.5 text-sm font-medium rounded-md shadow-sm text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
           Add Rule
         </button>
       </div>
@@ -209,16 +212,16 @@ watch(() => props.id, (newId) => {
 
 <style scoped>
 .input-field {
-  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm;
+  @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
 }
 .rule-item {
-  /* Slightly different background for rule items */
   background-color: #f9fafb; 
+  @apply p-3 border border-gray-200 rounded-md space-y-2;
 }
 .btn-primary {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200;
+    @apply px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200;
 }
 .btn-secondary {
-    @apply bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-2 px-4 rounded transition-colors duration-200;
+    @apply px-4 py-2 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors duration-200;
 }
 </style> 

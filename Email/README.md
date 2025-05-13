@@ -26,3 +26,45 @@ The Supabase client is initialized in `src/supabase.js` and can be imported anyw
 ```js
 import { supabase } from './supabase';
 ```
+
+---
+
+## Supabase Row Level Security (RLS) & Role-Based Access
+
+This project uses robust RLS (Row Level Security) policies in Supabase to control access to tables based on user roles.
+
+### Admin Policy Pattern
+- **Admin rights** (such as deleting any template) are granted by checking the `user_roles` table directly in RLS policies, not relying on JWT claims.
+- This ensures that role changes take effect immediately and are always enforced at the database level.
+
+**Example RLS Policy for Admin Delete:**
+```sql
+CREATE POLICY "Allow app_admin delete"
+ON public.templates
+FOR DELETE
+USING (
+  EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = auth.uid() AND role = 'app_admin'
+  )
+);
+```
+
+### Recommended Pattern for Other Roles/Tables
+- Use the same pattern for any table and role:
+  - Check the `user_roles` table for the required role in the RLS policy.
+  - Example for designer update rights:
+    ```sql
+    CREATE POLICY "Allow designer update"
+    ON public.templates
+    FOR UPDATE
+    USING (
+      EXISTS (
+        SELECT 1 FROM public.user_roles
+        WHERE user_id = auth.uid() AND role = 'designer'
+      )
+    );
+    ```
+- This approach is dynamic, secure, and does not require JWT claim updates or session refreshes after role changes.
+
+---

@@ -22,6 +22,10 @@
       <div v-if="errorAppliedDesign" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
         Error fetching selected design details: {{ errorAppliedDesign.message }}
       </div>
+      <div v-if="loadingCollections" class="text-center text-gray-500 py-4">Loading collections...</div>
+      <div v-if="errorCollections" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-2" role="alert">
+        Error fetching collections: {{ errorCollections.message }}
+      </div>
     </div>
     
     <div v-if="template && !loadingTemplate" class="space-y-6">
@@ -30,6 +34,31 @@
         <h1 class="text-2xl md:text-3xl font-bold text-gray-800 mb-3">{{ template.name }}</h1>
         <div class="text-sm space-y-1 text-gray-600">
            <p v-if="template.category"><strong>Category:</strong> {{ template.category }}</p>
+           <!-- Collection Display and Edit -->
+           <div class="flex items-center space-x-2">
+             <p><strong>Collection:</strong> 
+               <span v-if="template.collection_id && getCollectionName(template.collection_id)">{{ getCollectionName(template.collection_id) }}</span>
+               <span v-else-if="!template.collection_id">[Unassigned]</span>
+               <span v-else class="italic text-gray-400">Loading collection...</span>
+             </p>
+             <button @click="editingCollection = !editingCollection" v-if="!editingCollection && canEditTemplate" class="text-xs text-blue-500 hover:underline">(Change)</button>
+           </div>
+           <div v-if="editingCollection && canEditTemplate" class="mt-2 flex items-center space-x-2 p-2 bg-gray-50 rounded">
+              <select v-model="selectedCollectionIdForEdit" class="mt-1 block w-full md:w-1/2 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  <option :value="null">[Unassign]</option>
+                  <option v-for="col in allCollectionsForSelect" :key="col.id" :value="col.id">{{ col.name }}</option>
+              </select>
+              <button @click="handleSaveCollectionAssignment" :disabled="savingCollectionAssignment" 
+                class="px-3 py-1.5 text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-50 transition-colors duration-200">
+                <span v-if="savingCollectionAssignment">Saving...</span>
+                <span v-else>Save</span>
+              </button>
+              <button @click="editingCollection = false; selectedCollectionIdForEdit = template.collection_id || null;" 
+                class="px-3 py-1.5 text-xs font-medium rounded-md shadow-sm text-gray-700 bg-gray-200 hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-500 transition-colors duration-200">Cancel</button>
+           </div>
+           <p v-if="saveCollectionError" class="text-red-600 text-xs mt-1">{{ saveCollectionError }}</p>
+           <p v-if="saveCollectionSuccess" class="text-green-600 text-xs mt-1">Collection updated!</p>
+           <!-- End Collection Display and Edit -->
            <p v-if="template.description"><strong>Description:</strong> {{ template.description }}</p>
            <p v-if="template.legacy_url"><strong>Legacy URL:</strong> 
              <a :href="template.legacy_url" target="_blank" class="text-blue-600 hover:underline break-all">{{ template.legacy_url }}</a>
@@ -41,13 +70,15 @@
       <div class="placeholders-section bg-gray-50 p-4 rounded border border-gray-200">
         <h3 class="font-semibold text-gray-700 mb-2">Defined Variables:</h3>
         <div v-if="loadingVariables" class="text-sm text-gray-500 italic">Loading variables...</div>
+        <div v-else-if="errorVariables" class="bg-red-100 border border-red-400 text-red-700 px-3 py-2 rounded text-sm my-2" role="alert">
+          Could not load template variables: {{ errorVariables.message }}
+        </div>
         <div v-else-if="templateVariables.length > 0" class="flex flex-wrap gap-2">
           <span v-for="variable in templateVariables" :key="variable.id" class="bg-blue-100 text-blue-800 text-xs font-mono px-2 py-1 rounded" :title="variable.description || variable.variable_name">
             {{ variable.variable_name }}
           </span>
         </div>
-        <p v-else-if="!errorVariables" class="text-sm text-gray-500 italic">No variables defined for this template in the database.</p>
-        <p v-if="errorVariables" class="text-sm text-red-600 italic">Could not load variables.</p>
+        <p v-else class="text-sm text-gray-500 italic">No variables defined for this template in the database.</p>
       </div>
       <!-- End Placeholder Display Section -->
 
@@ -96,7 +127,7 @@
              <button 
                 @click="handleSaveContent"
                 :disabled="savingContent || !canEditTemplate"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                class="px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-colors duration-200"
             >
                 {{ saveContentButtonText }}
             </button>
@@ -111,7 +142,7 @@
       <div class="design-selector bg-white p-4 rounded-lg shadow border border-gray-200 flex flex-wrap items-end gap-4" v-if="!loadingAllDesigns">
          <div class="flex-grow min-w-[250px]">
            <label for="designSelect" class="block text-sm font-medium text-gray-700 mb-1">Apply Design:</label>
-           <select id="designSelect" v-model="selectedDesignId" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md">
+           <select id="designSelect" v-model="selectedDesignId" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                <option :value="null" disabled>-- Select a Design --</option>
                <option v-for="design in allDesigns" :key="design.id" :value="design.id">
                  {{ design.name }}
@@ -124,7 +155,7 @@
             <button 
                 @click="handleSaveDesignChoice"
                 :disabled="!selectedDesignId || savingDesignChoice || !canEditTemplate"
-                class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                class="px-4 py-2 text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap transition-colors duration-200"
                 title="Save the selected design as the default for this template"
             >
                 {{ saveButtonText }}
@@ -133,6 +164,7 @@
          <!-- Error/Info messages for Design Choice -->
          <div class="w-full mt-2 space-y-1">
              <p v-if="allDesigns.length === 0" class="text-sm text-gray-500 italic">No designs found.</p>
+             <p v-if="saveDesignSuccessMessage" class="text-green-600 text-sm">{{ saveDesignSuccessMessage }}</p>
              <p v-if="saveError" class="text-red-600 text-sm">{{ saveError }}</p>
              <p v-if="!canEditTemplate && template && template.created_by" class="text-yellow-600 text-sm">Cannot save applied design: Template not owned by current user.</p>
          </div>
@@ -176,7 +208,7 @@
 
 <script setup>
 import { ref, onMounted, watch, computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { supabase } from '../supabase';
 import RichTextEditor from '../components/RichTextEditor.vue';
 import HtmlCodeEditor from '../components/HtmlCodeEditor.vue';
@@ -184,6 +216,7 @@ import * as prettier from "prettier/standalone";
 import * as prettierPluginHtml from "prettier/plugins/html";
 
 const route = useRoute();
+const router = useRouter();
 const template = ref(null);
 const loadingTemplate = ref(true);
 const errorTemplate = ref(null);
@@ -197,6 +230,16 @@ const errorAppliedDesign = ref(null);
 const savingDesignChoice = ref(false);
 const saveError = ref(null);
 const user = ref(null);
+
+// Collections state
+const allCollectionsForSelect = ref([]);
+const loadingCollections = ref(false);
+const errorCollections = ref(null);
+const editingCollection = ref(false);
+const selectedCollectionIdForEdit = ref(null);
+const savingCollectionAssignment = ref(false);
+const saveCollectionError = ref("");
+const saveCollectionSuccess = ref(false);
 
 // Content refs
 const headerContent = ref('');
@@ -251,9 +294,35 @@ const BODY_PLACEHOLDER = '<!--body_content_placeholder-->';
 const HEADER_PLACEHOLDER = '<!--header_content_placeholder-->';
 const FOOTER_PLACEHOLDER = '<!--footer_content_placeholder-->';
 
+const saveDesignSuccessMessage = ref(null);
+
 async function fetchCurrentUser() {
   const { data: { session } } = await supabase.auth.getSession();
   user.value = session?.user ?? null;
+}
+
+async function fetchAllCollectionsForSelect() {
+  loadingCollections.value = true;
+  errorCollections.value = null;
+  try {
+    const { data, error } = await supabase
+      .from('collections')
+      .select('id, name')
+      .order('name', { ascending: true });
+    if (error) throw error;
+    allCollectionsForSelect.value = data || [];
+  } catch (e) {
+    console.error('Error fetching all collections for select:', e);
+    errorCollections.value = e;
+  } finally {
+    loadingCollections.value = false;
+  }
+}
+
+function getCollectionName(collectionId) {
+    if (!collectionId) return ''; 
+    const found = allCollectionsForSelect.value.find(c => c.id === collectionId);
+    return found ? found.name : 'Unknown Collection'; // Or could return 'Loading...' if collections not yet loaded
 }
 
 async function fetchAllDesigns() {
@@ -339,51 +408,31 @@ async function fetchTemplate(templateId) {
   try {
     const { data, error } = await supabase
       .from('templates')
-      .select('*')
+      .select('*, collection_id')
       .eq('id', templateId)
       .single();
     if (error) {
-      if (error.code === 'PGRST116') template.value = null;
-      else throw error;
+      if (error.code === 'PGRST116') {
+        template.value = null;
+        errorTemplate.value = new Error('Template not found.');
+      } else throw error;
     } else {
       template.value = data;
       if (template.value) {
           headerContent.value = template.value.header_content || '';
+          bodyContent.value = template.value.body_content || '';
           footerContent.value = template.value.footer_content || '';
+          selectedDesignId.value = template.value.applied_design_id || null;
+          selectedCollectionIdForEdit.value = template.value.collection_id || null;
 
-          // --- Re-enable Prettier formatting --- 
           let rawBody = template.value.body_content || '';
           try {
-              console.log('Formatting body content...');
-              bodyContent.value = await prettier.format(rawBody, {
-                  parser: "html", 
-                  plugins: [prettierPluginHtml],
-              });
-              console.log('Formatting complete.');
+              bodyContent.value = await prettier.format(rawBody, { parser: "html", plugins: [prettierPluginHtml] });
           } catch (formatError) {
-              console.error('Prettier formatting failed:', formatError);
-              bodyContent.value = rawBody; // Fallback to raw HTML on error
+              console.error('Prettier formatting failed for body:', formatError);
+              bodyContent.value = rawBody; 
           }
-          // --------------------------------------
-
-          // Set the initial design selection (logic unchanged)
-          if (template.value.applied_design_id && allDesigns.value.some(d => d.id === template.value.applied_design_id)) {
-              selectedDesignId.value = template.value.applied_design_id;
-          } else {
-              const noScaffoldDesign = allDesigns.value.find(d => d.name === 'No Scaffold');
-              if (noScaffoldDesign) {
-                  selectedDesignId.value = noScaffoldDesign.id;
-              } else {
-                  const basicStarter = allDesigns.value.find(d => d.name === 'Basic Starter Design');
-                  if (basicStarter) {
-                      selectedDesignId.value = basicStarter.id;
-                  } else if (allDesigns.value.length > 0) {
-                      selectedDesignId.value = allDesigns.value[0].id;
-                  } else {
-                       selectedDesignId.value = null;
-                  }
-              }
-          }
+          await fetchTemplateVariables(template.value.id);
       }
     }
   } catch (e) {
@@ -410,14 +459,16 @@ async function handleSaveDesignChoice() {
     }
     savingDesignChoice.value = true;
     saveError.value = null;
+    saveDesignSuccessMessage.value = null;
     try {
         const { error: updateError } = await supabase
             .from('templates')
             .update({ applied_design_id: selectedDesignId.value })
             .eq('id', template.value.id);
         if (updateError) throw updateError;
-        console.log('Applied design saved successfully!');
         template.value.applied_design_id = selectedDesignId.value; 
+        saveDesignSuccessMessage.value = "Applied design saved successfully!";
+        setTimeout(() => { saveDesignSuccessMessage.value = null; }, 3000);
     } catch(e) {
         console.error('Error saving applied design:', e);
         saveError.value = `Failed to save: ${e.message}`;
@@ -426,7 +477,6 @@ async function handleSaveDesignChoice() {
     }
 }
 
-// --- NEW Save Content Function ---
 async function handleSaveContent() {
     if (!template.value) return;
     await fetchCurrentUser();
@@ -438,34 +488,25 @@ async function handleSaveContent() {
          saveContentError.value = "You don't have permission to edit this template content.";
          return;
     }
-
     savingContent.value = true;
     saveContentError.value = null;
     saveContentSuccess.value = false;
-
     const contentToUpdate = {
         header_content: headerContent.value,
         body_content: bodyContent.value,
         footer_content: footerContent.value
     };
-
     try {
         const { error } = await supabase
             .from('templates')
             .update(contentToUpdate)
             .eq('id', template.value.id);
-        
         if (error) throw error;
-
-        console.log('Content saved successfully!');
         saveContentSuccess.value = true;
-        // Optionally update local template ref if needed, though fetch on reload covers it
         template.value.header_content = headerContent.value;
         template.value.body_content = bodyContent.value;
         template.value.footer_content = footerContent.value;
-
-        setTimeout(() => { saveContentSuccess.value = false; }, 3000); // Hide success message
-
+        setTimeout(() => { saveContentSuccess.value = false; }, 3000); 
     } catch (e) {
         console.error('Error saving content:', e);
         saveContentError.value = `Failed to save content: ${e.message}`;
@@ -473,97 +514,87 @@ async function handleSaveContent() {
         savingContent.value = false;
     }
 }
-// -------------------------------
 
 const newDesignHtml = computed(() => {
   if (!template.value || !appliedDesign.value) {
     return '<div>Template or Design not loaded.</div>';
   }
-  
   let scaffold = appliedDesign.value.html_scaffold || '';
   const css = appliedDesign.value.css_scaffold || '';
   const assets = appliedDesign.value.assets || {};
-
-  // Get edited content from refs
   const headerHtml = headerContent.value || '';
-  const bodyHtml = bodyContent.value || ''; // This is the potentially edited legacy HTML
+  const bodyHtml = bodyContent.value || '';
   const footerHtml = footerContent.value || '';
-
-  // 1. Replace asset placeholders in the scaffold FIRST
   const assetRegex = /\{\{assets\.([\w_]+?)\}\}/g;
-  scaffold = scaffold.replace(assetRegex, (match, assetKey) => {
-    return assets[assetKey] || match; 
-  });
-
+  scaffold = scaffold.replace(assetRegex, (match, assetKey) => assets[assetKey] || match);
   let finalHtml = '';
-
-  // 2. Check if the scaffold is a "full scaffold" (contains body placeholder)
   if (scaffold.includes(BODY_PLACEHOLDER)) {
-      // Inject header, body, and footer into their respective placeholders
       finalHtml = scaffold
           .replace(HEADER_PLACEHOLDER, headerHtml)
           .replace(BODY_PLACEHOLDER, bodyHtml)
           .replace(FOOTER_PLACEHOLDER, footerHtml);
-      console.log('[newDesignHtml] Applied full scaffold design.');
   } else {
-      // Assume it's a header/footer only design (or just plain HTML)
-      // Render header (if placeholder exists), then body, then footer (if placeholder exists)
       let headerPart = '';
       let footerPart = '';
-      
-      // Check if scaffold *only* contains header/footer structure
-      // (This is a basic check; more robust logic might be needed for complex cases)
       if (scaffold.includes(HEADER_PLACEHOLDER)) {
-          headerPart = scaffold.replace(HEADER_PLACEHOLDER, headerHtml);
-          // Attempt to remove footer placeholder if it also exists, to avoid duplicating it
-          headerPart = headerPart.replace(FOOTER_PLACEHOLDER, ''); 
+          headerPart = scaffold.replace(HEADER_PLACEHOLDER, headerHtml).replace(FOOTER_PLACEHOLDER, ''); 
       }
       if (scaffold.includes(FOOTER_PLACEHOLDER)) {
-          footerPart = scaffold.replace(FOOTER_PLACEHOLDER, footerHtml);
-           // Attempt to remove header placeholder if it also exists
-          footerPart = footerPart.replace(HEADER_PLACEHOLDER, ''); 
+          footerPart = scaffold.replace(FOOTER_PLACEHOLDER, footerHtml).replace(HEADER_PLACEHOLDER, ''); 
       }
-
       finalHtml = headerPart + bodyHtml + footerPart;
-      console.log('[newDesignHtml] Applied header/footer wrapping design.');
-      
-      // If scaffold had NEITHER header nor footer placeholder, but had content, 
-      // maybe treat scaffold itself as header? Or ignore scaffold? 
-      // Current logic assumes scaffold provides structure for header/footer *only* if body placeholder missing.
       if (!headerPart && !footerPart && scaffold.trim()){
           console.warn('[newDesignHtml] Design scaffold has no known placeholders, but has content. Rendering header+body+footer sequentially.');
-          // Fallback: prepend scaffold content as if it were a header?
-          // finalHtml = scaffold + bodyHtml + footerHtml; // Or just bodyHtml?
       }
   }
-
-  // Note: Sample data placeholder replacement (like {Password}) is NO LONGER done here.
-  // That should happen when *generating the final sendable email*, not in the live editor preview.
-  // The preview now shows the results of editing header/body(HTML)/footer content within the design structure.
-
   return `<style>${css}</style>${finalHtml}`;
 });
 
 watch(selectedDesignId, (newId, oldId) => {
-  if (newId && newId !== oldId) {
-    fetchDesignById(newId);
-  } else if (!newId) { 
-    appliedDesign.value = null;
-  }
+  if (newId && newId !== oldId) fetchDesignById(newId);
+  else if (!newId) appliedDesign.value = null;
 }, { immediate: true }); 
 
 onMounted(async () => {
   await fetchCurrentUser(); 
-  await fetchAllDesigns(); // Ensure designs are loaded first
-  await fetchTemplate(route.params.id); // Then load template which uses designs list for default
+  await fetchAllDesigns();
+  await fetchAllCollectionsForSelect();
+  await fetchTemplate(route.params.id);
 });
 
 watch(() => route.params.id, async (newTemplateId) => {
   if (newTemplateId) {
     await fetchCurrentUser(); 
-    await fetchAllDesigns(); // Ensure designs are available for default selection
+    await fetchAllDesigns();
+    await fetchAllCollectionsForSelect();
     await fetchTemplate(newTemplateId);
   }
 }, { immediate: false });
+
+async function handleSaveCollectionAssignment() {
+  if (!template.value || !canEditTemplate.value) {
+    saveCollectionError.value = "Cannot save: No template loaded or no permission.";
+    return;
+  }
+  savingCollectionAssignment.value = true;
+  saveCollectionError.value = "";
+  saveCollectionSuccess.value = false;
+  try {
+    const { error } = await supabase
+      .from('templates')
+      .update({ collection_id: selectedCollectionIdForEdit.value })
+      .eq('id', template.value.id);
+    if (error) throw error;
+    template.value.collection_id = selectedCollectionIdForEdit.value;
+    saveCollectionSuccess.value = true;
+    editingCollection.value = false;
+    setTimeout(() => { saveCollectionSuccess.value = false; }, 3000);
+  } catch (e) {
+    console.error('Error saving collection assignment:', e);
+    saveCollectionError.value = `Failed: ${e.message}`;
+  } finally {
+    savingCollectionAssignment.value = false;
+  }
+}
 
 </script> 
