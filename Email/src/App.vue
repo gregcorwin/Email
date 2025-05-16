@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { supabase } from './supabase';
 import { useRouter, useRoute } from 'vue-router';
 
@@ -20,6 +20,23 @@ const navigation = [
 ];
 
 onMounted(() => {
+  async function checkSessionAndRedirect() {
+    const { data } = await supabase.auth.getSession();
+    session.value = data.session;
+    if (!session.value || !session.value.user) {
+      router.push({ name: 'Auth' });
+    }
+  }
+
+  checkSessionAndRedirect();
+
+  // Listen for tab focus/visibility change
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      await checkSessionAndRedirect();
+    }
+  });
+
   supabase.auth.getSession().then(({ data }) => {
     session.value = data.session;
     console.log('[App.vue] Initial session on mount:', session.value ? 'Exists' : 'Null', 'AAL:', session.value?.user?.aal);
@@ -90,8 +107,18 @@ async function handleLogout() {
     } catch (e) {
         console.error('[App.vue] SIMPLE LOGOUT: Error caught during supabase.auth.signOut() call:', e);
     }
-    console.log('[App.vue] SIMPLE LOGOUT: handleLogout function finished.');
+    // Always redirect to Auth and clear session
+    session.value = null;
+    router.push({ name: 'Auth' });
 }
+
+// Watch for session loss and force logout/redirect
+watch(session, (newSession) => {
+  if (!newSession || !newSession.user) {
+    // Session lost, force logout and redirect
+    router.push({ name: 'Auth' });
+  }
+});
 </script>
 
 <template>

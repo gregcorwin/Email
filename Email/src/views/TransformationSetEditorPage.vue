@@ -167,21 +167,80 @@ async function handleSaveSet() {
       if (updateSetError) throw updateSetError;
     }
 
-    // Upsert rules
-    const rulesToSave = rules.value.map(r => ({ ...r, set_id: setId }));
-    // Delete rules not in current list (for edit mode)
+    // 1. Get IDs of rules currently in the UI that have an existing ID
+    const uiExistingRuleIds = rules.value.map(r => r.id).filter(id => !!id);
+
+    // 2. Delete rules from DB for this set that are no longer in the UI (for edit mode)
     if (props.mode === 'edit') {
-        const currentRuleIds = rulesToSave.map(r => r.id).filter(id => id);
-        const { error: deleteError } = await supabase
-            .from('transformation_rules')
-            .delete()
-            .eq('set_id', setId)
-            .not('id', 'in', `(${currentRuleIds.join(',') || 'null'})`); // Ensure valid SQL if no rules
-        if (deleteError) console.warn('Error deleting old rules:', deleteError);
+      const deleteQuery = supabase
+        .from('transformation_rules')
+        .delete()
+        .eq('set_id', setId);
+
+      if (uiExistingRuleIds.length > 0) {
+        // Delete rules associated with the set but NOT in the current UI's list of existing rule IDs
+        deleteQuery.not('id', 'in', `(${uiExistingRuleIds.join(',')})`);
+      } else {
+        // If there are no existing rule IDs in the UI, it means all previously existing rules were removed.
+        // The query `delete().eq('set_id', setId)` without a .not() will delete all rules for the set.
+      }
+      
+      const { error: deleteError } = await deleteQuery;
+      if (deleteError) {
+        // Log a warning but don't necessarily stop the whole process,
+        // as subsequent inserts/updates might still be valid.
+        console.warn('Error deleting old rules:', deleteError);
+      }
     }
 
-    const { error: rulesUpsertError } = await supabase.from('transformation_rules').upsert(rulesToSave);
-    if (rulesUpsertError) throw rulesUpsertError;
+    // 3. Separate UI rules into new (to be inserted) and existing (to be updated)
+    const newRulePayloads = [];
+    const existingRulePayloads = [];
+
+    rules.value.forEach(rule => {
+      // Ensure all rules have the set_id
+      const payload = { ...rule, set_id: setId };
+      
+      // Add user ID for tracking, if your schema supports created_by/updated_by for rules
+      // Example:
+      // if (!payload.id) { // New rule
+      //   payload.created_by = user.value.id;
+      // }
+      // payload.updated_by = user.value.id; // For both new and existing if you have updated_by
+
+      if (rule.id) { // This rule has an ID, so it's an existing rule to be updated
+        existingRulePayloads.push(payload);
+      } else { // This rule does not have an ID, so it's a new rule to be inserted
+        delete payload.id; // IMPORTANT: Remove id property so DB generates it
+        newRulePayloads.push(payload);
+      }
+    });
+
+    // 4. Insert new rules
+    if (newRulePayloads.length > 0) {
+      const { data: insertedRules, error: insertError } = await supabase
+        .from('transformation_rules')
+        .insert(newRulePayloads)
+        .select(); // Optionally select to get back the inserted rules with their new IDs
+      if (insertError) {
+        console.error("Error inserting new rules:", insertError);
+        throw insertError; // Make this a critical error
+      }
+      // console.log('Inserted new rules:', insertedRules);
+    }
+
+    // 5. Update existing rules (using upsert is fine here, acts as update)
+    if (existingRulePayloads.length > 0) {
+      const { data: updatedRules, error: updateError } = await supabase
+        .from('transformation_rules')
+        .upsert(existingRulePayloads)
+        .select(); // Optionally select
+      if (updateError) {
+        console.error("Error updating existing rules:", updateError);
+        throw updateError; // Make this a critical error
+      }
+      // console.log('Updated existing rules:', updatedRules);
+    }
 
     router.push({ name: 'TransformationsList' });
   } catch (e) {

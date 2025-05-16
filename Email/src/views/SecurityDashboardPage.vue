@@ -3,7 +3,19 @@
     <h1 class="text-2xl font-bold text-gray-800 mb-6">Security Dashboard</h1>
     
     <div v-if="loadingUserRole" class="text-center text-gray-500 py-4">Loading user information...</div>
-    <div v-else-if="!isAdmin" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+    <!-- Show user info and role for debugging -->
+    <div v-else class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between bg-gray-50 p-3 rounded border border-gray-200">
+      <div class="text-sm text-gray-700">
+        <span class="font-semibold">User:</span> {{ currentUserEmail || 'Unknown' }}<br>
+        <span class="font-semibold">Role:</span> {{ userRole || 'None' }}
+      </div>
+      <div v-if="roleFetchError" class="mt-2 sm:mt-0">
+        <span class="text-red-600 text-xs">{{ roleFetchError }}</span>
+        <button @click="fetchUserRoleForPage" class="ml-2 px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600">Retry</button>
+        <button @click="handleLogout" class="ml-2 px-2 py-1 text-xs rounded bg-red-500 text-white hover:bg-red-600">Logout</button>
+      </div>
+    </div>
+    <div v-if="!isAdmin && !loadingUserRole && !roleFetchError" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
       <p class="font-bold">Access Denied</p>
       <p>You do not have permission to view this page. This dashboard is for administrators only.</p>
     </div>
@@ -108,9 +120,12 @@
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
 import { supabase } from '../supabase';
+import { useRouter } from 'vue-router';
 
 const userRole = ref(null);
 const loadingUserRole = ref(true);
+const currentUserEmail = ref(null);
+const roleFetchError = ref(null);
 
 // RLS Policies State
 const rlsPolicies = ref([]);
@@ -118,6 +133,7 @@ const loadingRlsPolicies = ref(false);
 const rlsPoliciesError = ref(null);
 
 const isAdmin = computed(() => userRole.value === 'app_admin');
+const router = useRouter();
 
 const groupedRlsPolicies = computed(() => {
   if (!rlsPolicies.value) return {};
@@ -393,45 +409,45 @@ const getMissingExpectedPolicies = (tableName) => {
 
 async function fetchUserRoleForPage() {
   loadingUserRole.value = true;
-  userRole.value = null; // Reset before fetching
-  console.log('[SecurityDashboard] Attempting to fetch user role for page...');
+  userRole.value = null;
+  roleFetchError.value = null;
+  currentUserEmail.value = null;
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
   if (sessionError) {
-    console.error('[SecurityDashboard] Error getting session:', sessionError);
-    userRole.value = null;
+    roleFetchError.value = 'Error getting session: ' + sessionError.message;
     loadingUserRole.value = false;
     return;
   }
-
-  if (session && session.user) {
-    console.log('[SecurityDashboard] Session user ID:', session.user.id);
-    try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .single();
-      
-      console.log('[SecurityDashboard] Raw response from user_roles query - data:', data);
-      console.log('[SecurityDashboard] Raw response from user_roles query - error:', error);
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is a valid outcome (no role)
-        console.error('Error fetching user role for security dashboard:', error.message);
-        throw error; // Rethrow to be caught by outer catch if it's a real DB error
-      }
-      userRole.value = data?.role || null;
-      console.log('[SecurityDashboard] User role set to:', userRole.value);
-    } catch (e) {
-      console.error('Exception during user role fetch:', e.message);
-      userRole.value = null; // Default to no specific role on error
-    }
-  } else {
-    console.log('[SecurityDashboard] No active session to fetch role for.');
-    userRole.value = null;
+  if (!session || !session.user) {
+    roleFetchError.value = 'Session expired or not found. Please log in again.';
+    loadingUserRole.value = false;
+    setTimeout(() => router.push({ name: 'Auth' }), 1500);
+    return;
   }
-  loadingUserRole.value = false;
-  console.log('[SecurityDashboard] isAdmin computed to:', isAdmin.value);
+  currentUserEmail.value = session.user.email;
+  try {
+    const { data, error } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', session.user.id)
+      .single();
+    if (error && error.code !== 'PGRST116') {
+      roleFetchError.value = 'Error fetching user role: ' + error.message;
+      userRole.value = null;
+      return;
+    }
+    userRole.value = data?.role || null;
+  } catch (e) {
+    roleFetchError.value = 'Exception during user role fetch: ' + (e.message || e);
+    userRole.value = null;
+  } finally {
+    loadingUserRole.value = false;
+  }
+}
+
+async function handleLogout() {
+  await supabase.auth.signOut();
+  router.push({ name: 'Auth' });
 }
 
 async function fetchRlsPoliciesData() {
